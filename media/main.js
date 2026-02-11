@@ -1,5 +1,13 @@
 // SF Commit Studio - Webview Main Script
 (function () {
+    // Polyfill CSS.escape if not available
+    if (!window.CSS || !window.CSS.escape) {
+        window.CSS = window.CSS || {};
+        window.CSS.escape = function(s) {
+            return s.replace(/([!"#$%&'()*+,.\/:;<=>?@[\\\]^`{|}~])/g, '\\$1');
+        };
+    }
+
     const vscode = acquireVsCodeApi();
 
     // --- State ---
@@ -237,6 +245,13 @@
         });
     }
 
+    /**
+     * Commits the selected metadata changes to the repository.
+     * 
+     * If more than 50 items are selected, it delegates to 'confirmLargeCommit'
+     * to show a native VS Code confirmation dialog. Otherwise, it sends
+     * the 'commitChanges' command directly.
+     */
     function commitChanges() {
         const targetOrg = dom.orgSelector.value;
         const message = dom.commitMessage.value;
@@ -412,37 +427,75 @@
         return state.filteredMetadata.slice(start, end);
     }
 
+    function createRow(item, isSelected) {
+        const tr = document.createElement('tr');
+        tr.role = 'row';
+        tr.dataset.id = item.id;
+        if (isSelected) tr.classList.add('selected');
+
+        // Checkbox cell
+        const tdCheckbox = document.createElement('td');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = isSelected;
+        checkbox.setAttribute('aria-label', `Select ${item.componentName}`);
+        checkbox.addEventListener('change', () => toggleSelection(item.id));
+        tdCheckbox.appendChild(checkbox);
+        tr.appendChild(tdCheckbox);
+
+        // Name cell
+        const tdName = document.createElement('td');
+        tdName.textContent = item.componentName;
+        tdName.title = item.componentName;
+        tr.appendChild(tdName);
+
+        // Type cell
+        const tdType = document.createElement('td');
+        tdType.textContent = item.type;
+        tr.appendChild(tdType);
+
+        // Modified By cell
+        const tdModifiedBy = document.createElement('td');
+        tdModifiedBy.textContent = item.modifiedBy;
+        tr.appendChild(tdModifiedBy);
+
+        // Date cell
+        const tdDate = document.createElement('td');
+        tdDate.textContent = formatDate(item.date);
+        tdDate.title = item.date || '';
+        tr.appendChild(tdDate);
+
+        // Modified By cell (Last column)
+        const tdLast = document.createElement('td');
+        tdLast.textContent = item.modifiedBy;
+        tr.appendChild(tdLast);
+
+        // Row click handler (toggle on click, but not on checkbox)
+        tr.addEventListener('click', (e) => {
+            if (e.target.tagName !== 'INPUT') {
+                toggleSelection(item.id);
+            }
+        });
+
+        return tr;
+    }
+
+    /**
+     * Renders the metadata grid for the current page.
+     * 
+     * This function is triggered by tab switching, sorting, filtering, and pagination.
+     * It uses 'createRow' to build DOM nodes safely and efficiently.
+     * 
+     * Performance Note: This clears the entire grid body and re-renders only the 
+     * items for the current page (controlled by pagination.pageSize).
+     */
     function renderGrid() {
         dom.gridBody.innerHTML = '';
         const pageItems = getPageSlice();
 
         pageItems.forEach(item => {
-            const tr = document.createElement('tr');
-            tr.role = 'row';
-            tr.dataset.id = item.id;
             const isSelected = state.selectedIds.has(item.id);
-            if (isSelected) tr.classList.add('selected');
-
-            // Toggle selection on row click
-            tr.addEventListener('click', (e) => {
-                if (e.target.tagName !== 'INPUT') {
-                    toggleSelection(item.id);
-                }
-            });
-
-            tr.innerHTML = `
-                <td><input type="checkbox" ${isSelected ? 'checked' : ''} aria-label="Select ${escapeHtml(item.componentName)}"></td>
-                <td title="${escapeHtml(item.componentName)}">${escapeHtml(item.componentName)}</td>
-                <td>${escapeHtml(item.type)}</td>
-                <td>${escapeHtml(item.modifiedBy)}</td>
-                <td title="${escapeHtml(item.date)}">${formatDate(item.date)}</td>
-                <td>${escapeHtml(item.modifiedBy)}</td>
-            `;
-
-            // Wire up checkbox explicitly
-            const checkbox = tr.querySelector('input[type="checkbox"]');
-            checkbox.addEventListener('change', () => toggleSelection(item.id));
-
+            const tr = createRow(item, isSelected);
             dom.gridBody.appendChild(tr);
         });
 
@@ -454,6 +507,16 @@
         debouncedSaveState();
     }
 
+    /**
+     * Toggles the selection state of a metadata item by its ID.
+     * 
+     * Behavior:
+     * - In 'All' tab: Updates the 'selected' class and checkbox on the row.
+     * - In 'Selected' tab: Removes the row from the DOM if deselected.
+     * - Updates the global 'state.selectedIds' Set.
+     * 
+     * @param {string} id - The ID of the item to toggle.
+     */
     function toggleSelection(id) {
         if (state.selectedIds.has(id)) {
             state.selectedIds.delete(id);
@@ -461,12 +524,40 @@
             state.selectedIds.add(id);
         }
 
-        // If in "Selected" tab and we deselect, refresh the filtered list
-        if (state.currentTab === 'selected' && !state.selectedIds.has(id)) {
-            updateFilteredData();
+        // Update only the affected row's visual state
+        const safeId = CSS.escape(id);
+        const row = dom.gridBody.querySelector(`tr[data-id="${safeId}"]`);
+        
+        if (row) {
+            const isSelected = state.selectedIds.has(id);
+            row.classList.toggle('selected', isSelected);
+            const checkbox = row.querySelector('input[type="checkbox"]');
+            if (checkbox) {
+                checkbox.checked = isSelected;
+            }
         }
 
-        renderGrid();
+        // If viewing the "Selected" tab and we deselected, remove the row
+        if (state.currentTab === 'selected' && !state.selectedIds.has(id)) {
+            if (row) {
+                row.remove();
+            }
+            // Update filtered data to keep counts accurate
+            updateFilteredData();
+            
+            // If the current page is now empty and we are not on the first page, go back
+            const totalPages = Math.ceil(state.filteredMetadata.length / state.pagination.pageSize) || 1;
+            if (state.pagination.currentPage > totalPages) {
+                state.pagination.currentPage = Math.max(1, totalPages);
+                renderGrid(); // Re-render to show previous page
+                return;
+            }
+            // If we are still on a valid page (or the first page became empty), update UI
+            updatePaginationUI();
+        }
+
+        updateUI();
+        debouncedSaveState();
     }
 
     function updatePaginationUI() {
@@ -563,5 +654,16 @@
         if (isNaN(d.getTime())) return isoString; // Fallback for invalid dates
         const pad = n => String(n).padStart(2, '0');
         return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    // Expose for testing
+    if (typeof window !== 'undefined' && window._testHooks) {
+        window._testHooks.createRow = createRow;
+        window._testHooks.toggleSelection = toggleSelection;
+        window._testHooks.state = state;
+        window._testHooks.dom = dom;
+        window._testHooks.renderGrid = renderGrid;
+        window._testHooks.updateFilteredData = updateFilteredData;
+        window._testHooks.updatePaginationUI = updatePaginationUI;
     }
 })();

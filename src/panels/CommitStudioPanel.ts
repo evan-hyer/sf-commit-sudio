@@ -10,7 +10,14 @@ import type { WebviewMessage } from '../types.js';
  * Uses the Disposable pattern to clean up resources when the panel closes.
  */
 export class CommitStudioPanel {
+    /**
+     * The singleton instance of the panel.
+     */
     public static currentPanel: CommitStudioPanel | undefined;
+    
+    /**
+     * The unique identifier for the webview view type.
+     */
     public static readonly viewType = 'sfCommitStudio';
 
     private readonly _panel: vscode.WebviewPanel;
@@ -18,6 +25,12 @@ export class CommitStudioPanel {
     private readonly _service: ExtensionHostService;
     private _disposables: vscode.Disposable[] = [];
 
+    /**
+     * Private constructor to enforce the singleton pattern.
+     * 
+     * @param panel - The underlying WebviewPanel
+     * @param extensionUri - The URI of the extension directory
+     */
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
         this._panel = panel;
         this._extensionUri = extensionUri;
@@ -42,6 +55,8 @@ export class CommitStudioPanel {
     /**
      * Creates a new panel or reveals the existing one.
      * Singleton pattern ensures only one instance at a time.
+     * 
+     * @param extensionUri - The base URI for the extension
      */
     public static createOrShow(extensionUri: vscode.Uri): void {
         const column = vscode.window.activeTextEditor
@@ -81,6 +96,9 @@ export class CommitStudioPanel {
         }
     }
 
+    /**
+     * Updates the webview content.
+     */
     private _update(): void {
         this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
     }
@@ -88,6 +106,10 @@ export class CommitStudioPanel {
     /**
      * Returns webview options with scripts enabled, local resource roots
      * restricted to `media/`, and context retained when hidden.
+     * 
+     * @param extensionUri - The URI of the extension
+     * @returns A combination of WebviewOptions and WebviewPanelOptions
+     * @private
      */
     private static _getWebviewOptions(
         extensionUri: vscode.Uri
@@ -104,6 +126,10 @@ export class CommitStudioPanel {
      * - A strict Content Security Policy with a cryptographic nonce
      * - References to the external CSS and JS files in `media/`
      * - The full UI skeleton (header, tabs, grid, status bar)
+     * 
+     * @param webview - The webview instance to generate HTML for
+     * @returns The complete HTML string
+     * @private
      */
     private _getHtmlForWebview(webview: vscode.Webview): string {
         const scriptUri = webview.asWebviewUri(

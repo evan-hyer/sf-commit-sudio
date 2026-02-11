@@ -29,6 +29,9 @@ export class ExtensionHostService {
     private _orgService: OrgService;
     private _cachedMetadata: MetadataChange[] = [];
 
+    /**
+     * Creates a new instance of the ExtensionHostService.
+     */
     constructor() {
         this._orgService = new OrgService();
     }
@@ -38,6 +41,10 @@ export class ExtensionHostService {
     /**
      * Main message dispatcher. Routes incoming Webview messages to
      * the appropriate handler based on `message.command`.
+     *
+     * @param message - The typed message received from the Webview
+     * @param webview - The Webview instance to send responses back to
+     * @returns A promise that resolves when the message has been handled
      */
     public async handleMessage(message: WebviewMessage, webview: vscode.Webview): Promise<void> {
         switch (message.command) {
@@ -58,6 +65,14 @@ export class ExtensionHostService {
 
     // ─── Fetch Metadata ────────────────────────────────────────────
 
+    /**
+     * Fetches metadata changes from a Salesforce Org and sends them to the Webview.
+     *
+     * @param payload - The fetch parameters (targetOrg, types)
+     * @param requestId - The unique ID for the request
+     * @param webview - The Webview instance
+     * @private
+     */
     private async _handleFetchMetadata(
         payload: { targetOrg?: string; types?: string[] },
         requestId: string,
@@ -87,6 +102,13 @@ export class ExtensionHostService {
 
     // ─── Org List ──────────────────────────────────────────────────
 
+    /**
+     * Retrieves the list of available Salesforce Orgs using the SF CLI.
+     *
+     * @param requestId - The unique ID for the request
+     * @param webview - The Webview instance
+     * @private
+     */
     private async _handleGetOrgList(
         requestId: string,
         webview: vscode.Webview
@@ -121,6 +143,14 @@ export class ExtensionHostService {
 
     // ─── Commit Flow ───────────────────────────────────────────────
 
+    /**
+     * Performs the full commit flow: Retrieve -> Git Add -> Git Commit.
+     *
+     * @param payload - The commit parameters (ids, message, story ref, org)
+     * @param requestId - The unique ID for the request
+     * @param webview - The Webview instance
+     * @private
+     */
     private async _handleCommitChanges(
         payload: {
             selectedIds: string[];
@@ -175,6 +205,11 @@ export class ExtensionHostService {
      * Handles the confirmation-then-commit flow for large selections.
      * The Webview sends this instead of `commitChanges` when itemCount > 50.
      * The Extension Host shows a native VS Code confirmation dialog.
+     *
+     * @param payload - The commit parameters plus item count
+     * @param requestId - The unique ID for the request
+     * @param webview - The Webview instance
+     * @private
      */
     private async _handleConfirmLargeCommit(
         payload: {
@@ -221,6 +256,10 @@ export class ExtensionHostService {
 
     /**
      * Returns the workspace root path, or throws if none is open.
+     *
+     * @returns The absolute path to the first workspace folder
+     * @throws Error if no workspace folder is open
+     * @private
      */
     private _getWorkspaceRoot(): string {
         const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -233,6 +272,10 @@ export class ExtensionHostService {
     /**
      * Validates that the workspace contains a `sfdx-project.json`.
      * The `sf project retrieve start` command requires this file.
+     *
+     * @param workspaceRoot - The path to the workspace root
+     * @throws Error if sfdx-project.json is missing
+     * @private
      */
     private _requireSfdxProject(workspaceRoot: string): void {
         const projectFile = path.join(workspaceRoot, 'sfdx-project.json');
@@ -247,6 +290,11 @@ export class ExtensionHostService {
     /**
      * Maps selected IDs back to MetadataChange objects from the cache.
      * Uses a Set for O(1) lookups instead of Array.includes O(n).
+     *
+     * @param selectedIds - List of IDs to resolve
+     * @returns List of resolved MetadataChange objects
+     * @throws Error if no items match the IDs
+     * @private
      */
     private _resolveSelectedItems(selectedIds: string[]): MetadataChange[] {
         const idSet = new Set(selectedIds);
@@ -265,6 +313,13 @@ export class ExtensionHostService {
     /**
      * Retrieves metadata from Salesforce using the RetrieveService.
      * Throws if no items were successfully retrieved.
+     *
+     * @param retrieveService - Instance of RetrieveService
+     * @param items - Items to retrieve
+     * @param targetOrg - Optional alias/username for the target Org
+     * @returns The retrieval result
+     * @throws Error if retrieval fails or returns no items
+     * @private
      */
     private async _retrieveMetadata(
         retrieveService: RetrieveService,
@@ -288,6 +343,11 @@ export class ExtensionHostService {
     /**
      * Constructs the final Git commit message, optionally prepending
      * a User Story reference: `[US-0000275] message`.
+     *
+     * @param commitMsg - The base commit message
+     * @param userStoryRef - Optional user story reference
+     * @returns The formatted commit message
+     * @private
      */
     private _buildCommitMessage(commitMsg: string, userStoryRef?: string): string {
         if (userStoryRef?.trim()) {
@@ -298,6 +358,11 @@ export class ExtensionHostService {
 
     /**
      * Sends a progress update to the Webview.
+     *
+     * @param webview - The Webview instance
+     * @param step - The current step name
+     * @param detail - Optional detail message
+     * @private
      */
     private _sendProgress(webview: vscode.Webview, step: string, detail?: string): void {
         webview.postMessage({
@@ -308,6 +373,12 @@ export class ExtensionHostService {
 
     /**
      * Sends a structured error message to the Webview.
+     *
+     * @param webview - The Webview instance
+     * @param requestId - The ID of the request that caused the error
+     * @param error - The caught error object
+     * @param fallbackMessage - Message to use if the error object has no message
+     * @private
      */
     private _sendError(
         webview: vscode.Webview,

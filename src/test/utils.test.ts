@@ -1,4 +1,11 @@
 import * as assert from 'assert';
+import * as fs from 'fs';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
+import { JSDOM } from 'jsdom';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Unit tests for shared types and utility logic.
@@ -247,4 +254,180 @@ suite('Types and Utilities', () => {
             assert.ok(unique.includes('CustomObject:Account'));
         });
     });
+
+    // ─── Media Script (DOM Tests) ──────────────────────────────────
+    
+    suite('Media Script (DOM Tests)', () => {
+        let window: any;
+        let document: any;
+        let hooks: any;
+    
+        const htmlTemplate = `
+            <!DOCTYPE html>
+            <html lang="en">
+            <body>
+                <div id="loading-overlay" class="hidden"><span></span></div>
+                <div id="error-banner" class="hidden"><span id="error-message"></span></div>
+                <div id="success-banner" class="hidden"><span id="success-message"></span></div>
+                
+                <select id="org-selector"></select>
+                <input id="user-story-ref" type="text" />
+                <textarea id="commit-message"></textarea>
+                <button id="btn-commit" disabled></button>
+                <button id="btn-refresh"></button>
+                <button id="btn-retry"></button>
+    
+                <button id="tab-all" class="active" aria-selected="true">All</button>
+                <button id="tab-selected" aria-selected="false">Selected</button>
+    
+                <input id="filter-name" />
+                <select id="filter-type"></select>
+                <input id="filter-user" />
+    
+                <table class="grid">
+                    <thead>
+                        <tr>
+                            <th class="grid__header--sortable" data-sort="name">Name</th>
+                            <th class="grid__header--sortable" data-sort="type">Type</th>
+                            <th class="grid__header--sortable" data-sort="modifiedBy">User</th>
+                            <th class="grid__header--sortable" data-sort="date">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="grid-body"></tbody>
+                </table>
+    
+                <div id="pagination-controls">
+                    <span id="item-count"></span>
+                    <select id="page-size">
+                        <option value="25">25</option>
+                    </select>
+                    <button id="btn-prev"></button>
+                    <span id="page-numbers"></span>
+                    <button id="btn-next"></button>
+                </div>
+                
+                <input type="checkbox" id="select-all" />
+            </body>
+            </html>
+        `;
+    
+        setup(() => {
+            const dom = new JSDOM(htmlTemplate, {
+                runScripts: "dangerously",
+                resources: "usable",
+                url: "http://localhost/"
+            });
+            window = dom.window;
+            document = window.document;
+    
+            // Mock VS Code API
+            window.acquireVsCodeApi = () => ({
+                postMessage: () => {},
+                getState: () => ({}),
+                setState: () => {}
+            });
+            
+            // Prepare hooks
+            window._testHooks = {};
+    
+            // Load script
+            const scriptPath = path.resolve(__dirname, '../../media/main.js');
+            const scriptContent = fs.readFileSync(scriptPath, 'utf8');
+            
+            // Eval script
+            window.eval(scriptContent);
+            
+            hooks = window._testHooks;
+        });
+    
+        test('createRow should return a TR with correct cells', () => {
+            const item = {
+                id: '123',
+                componentName: 'TestComponent',
+                type: 'ApexClass',
+                modifiedBy: 'UserA',
+                date: '2026-02-10T10:00:00.000Z'
+            };
+            const tr = hooks.createRow(item, false);
+    
+            assert.strictEqual(tr.tagName, 'TR');
+            assert.strictEqual(tr.dataset.id, '123');
+            assert.strictEqual(tr.childNodes.length, 6); // Checkbox, Name, Type, ModifiedBy, Date, ModifiedBy(Last)
+    
+            // Checkbox
+            const tdCheckbox = tr.childNodes[0];
+            const checkbox = tdCheckbox.querySelector('input[type="checkbox"]');
+            assert.ok(checkbox);
+            assert.strictEqual(checkbox.checked, false);
+    
+            // Name
+            const tdName = tr.childNodes[1];
+            assert.strictEqual(tdName.textContent, 'TestComponent');
+    
+            // Type
+            const tdType = tr.childNodes[2];
+            assert.strictEqual(tdType.textContent, 'ApexClass');
+            
+            // ModifiedBy
+            const tdModified = tr.childNodes[3];
+            assert.strictEqual(tdModified.textContent, 'UserA');
+            
+            // Date
+            const tdDate = tr.childNodes[4];
+            assert.ok(tdDate.textContent.includes('2026'));
+        });
+    
+        test('createRow should escape HTML in componentName via textContent', () => {
+            const item = {
+                id: '123',
+                componentName: '<script>alert(1)</script>',
+                type: 'ApexClass',
+                modifiedBy: 'UserA',
+                date: '2026-02-10T10:00:00.000Z'
+            };
+            const tr = hooks.createRow(item, false);
+            const tdName = tr.childNodes[1];
+            
+            // textContent should be the raw string
+            assert.strictEqual(tdName.textContent, '<script>alert(1)</script>');
+            // innerHTML should be escaped
+            assert.ok(tdName.innerHTML.includes('&lt;script&gt;'));
+        });
+    
+        test('toggleSelection should update class and state', () => {
+            // Setup initial state
+            hooks.state.selectedIds = new Set();
+            hooks.state.allMetadata = [{ id: '1', componentName: 'A' }];
+            hooks.state.filteredMetadata = hooks.state.allMetadata;
+            
+            // Render grid to have the row
+            hooks.renderGrid();
+            
+            // Verify initial
+            const tr = document.querySelector('tr[data-id="1"]');
+            assert.ok(tr);
+            assert.ok(!tr.classList.contains('selected'));
+            
+            // Toggle
+            hooks.toggleSelection('1');
+            
+            assert.ok(hooks.state.selectedIds.has('1'));
+            assert.ok(tr.classList.contains('selected'));
+            assert.strictEqual(tr.querySelector('input').checked, true);
+            
+            // Toggle again
+            hooks.toggleSelection('1');
+            
+            assert.ok(!hooks.state.selectedIds.has('1'));
+            assert.ok(!tr.classList.contains('selected'));
+            assert.strictEqual(tr.querySelector('input').checked, false);
+        });
+    
+        test('CSS.escape polyfill/usage', () => {
+            // Just verify it exists
+            assert.ok(window.CSS.escape);
+            assert.strictEqual(window.CSS.escape('a.b'), 'a\\.b');
+        });
+    });
+
 });
