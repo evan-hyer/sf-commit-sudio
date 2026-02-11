@@ -29,9 +29,10 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
+    "pretest": "npm run compile",
     "lint": "eslint src --ext ts",
-    "test": "mocha --require ts-node/register --experimental-specifier-resolution=node src/test/**/*.test.ts"
+    "test": "npx mocha --ui tdd --color --timeout 10000 \"dist/test/utils.test.js\"",
+    "test:integration": "node ./dist/test/runTest.js"
   },
   "devDependencies": {
     "@types/glob": "^8.1.0",

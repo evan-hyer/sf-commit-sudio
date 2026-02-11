@@ -114,7 +114,7 @@ suite('CommitStudioPanel', () => {
             const extensionUri = vscode.Uri.file('/test/extension');
             CommitStudioPanel.createOrShow(extensionUri);
 
-            const options = createStub.firstCall.args[3];
+            const options = createStub.firstCall.args[3] as vscode.WebviewOptions & vscode.WebviewPanelOptions;
             assert.strictEqual(
                 options.enableScripts,
                 true,
@@ -131,7 +131,7 @@ suite('CommitStudioPanel', () => {
             const extensionUri = vscode.Uri.file('/test/extension');
             CommitStudioPanel.createOrShow(extensionUri);
 
-            const options = createStub.firstCall.args[3];
+            const options = createStub.firstCall.args[3] as vscode.WebviewOptions & vscode.WebviewPanelOptions;
             assert.strictEqual(
                 options.retainContextWhenHidden,
                 true,
@@ -148,13 +148,13 @@ suite('CommitStudioPanel', () => {
             const extensionUri = vscode.Uri.file('/test/extension');
             CommitStudioPanel.createOrShow(extensionUri);
 
-            const options = createStub.firstCall.args[3];
+            const options = createStub.firstCall.args[3] as vscode.WebviewOptions & vscode.WebviewPanelOptions;
             assert.ok(
                 options.localResourceRoots,
                 'Should specify localResourceRoots'
             );
             assert.strictEqual(
-                options.localResourceRoots.length,
+                options.localResourceRoots!.length,
                 1,
                 'Should have exactly one resource root'
             );
