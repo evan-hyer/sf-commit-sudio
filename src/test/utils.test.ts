@@ -20,7 +20,7 @@ suite('Types and Utilities', () => {
     suite('escapeHtml', () => {
         // Mirror the function from main.js for testability
         function escapeHtml(unsafe: string | null | undefined): string {
-            if (!unsafe) return '';
+            if (!unsafe) {return '';}
             return unsafe
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
@@ -85,9 +85,9 @@ suite('Types and Utilities', () => {
     suite('formatDate', () => {
         // Mirror the function from main.js
         function formatDate(isoString: string | null | undefined): string {
-            if (!isoString) return '';
+            if (!isoString) {return '';}
             const d = new Date(isoString);
-            if (isNaN(d.getTime())) return isoString as string;
+            if (isNaN(d.getTime())) {return isoString as string;}
             const pad = (n: number) => String(n).padStart(2, '0');
             return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
         }

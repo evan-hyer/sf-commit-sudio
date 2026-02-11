@@ -3,17 +3,25 @@
     "parser": "@typescript-eslint/parser",
     "parserOptions": {
         "ecmaVersion": 2022,
-        "sourceType": "module"
+        "sourceType": "module",
+        "project": "./tsconfig.json"
     },
     "plugins": [
         "@typescript-eslint"
     ],
     "rules": {
-        "@typescript-eslint/naming-convention": "warn",
+        "@typescript-eslint/naming-convention": [
+            "warn",
+            {
+                "selector": "variable",
+                "format": ["camelCase", "UPPER_CASE"],
+                "leadingUnderscore": "allowDouble"
+            }
+        ],
         "semi": "warn",
         "curly": "warn",
         "eqeqeq": "warn",
-        "no-throw-literal": "warn"
+        "@typescript-eslint/only-throw-error": "warn"
     },
     "ignorePatterns": [
         "dist/**",
