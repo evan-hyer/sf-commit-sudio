@@ -1,8 +1,12 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { OrgService, QueryService, RetrieveService, GitService } from '@evan-hyer/track-changes';
-import type { MetadataChange as TrackChangesMetadataChange } from '@evan-hyer/track-changes';
+// Deep imports for registry package
+import { OrgService } from '@evan-hyer/track-changes/dist/services/org-service.js';
+import { QueryService } from '@evan-hyer/track-changes/dist/services/query-service.js';
+import { RetrieveService } from '@evan-hyer/track-changes/dist/services/retrieve-service.js';
+import { GitService } from '@evan-hyer/track-changes/dist/services/git-service.js';
+
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 

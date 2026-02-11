@@ -1,5 +1,5 @@
-// SF Commit Studio - Main Script
-(function() {
+// SF Commit Studio - Webview Main Script
+(function () {
     const vscode = acquireVsCodeApi();
 
     // --- State ---
@@ -31,48 +31,59 @@
 
     // --- DOM Elements ---
     const dom = {
-        orgSelector: document.getElementById('org-selector'),
-        userStoryRef: document.getElementById('user-story-ref'),
-        commitMessage: document.getElementById('commit-message'),
-        btnCommit: document.getElementById('btn-commit'),
-        tabAll: document.getElementById('tab-all'),
-        tabSelected: document.getElementById('tab-selected'),
-        gridBody: document.getElementById('grid-body'),
-        itemCount: document.getElementById('item-count'),
-        selectAll: document.getElementById('select-all'),
-        loadingOverlay: document.getElementById('loading-overlay'),
-        errorBanner: document.getElementById('error-banner'),
-        errorMessage: document.getElementById('error-message'),
-        btnRetry: document.getElementById('btn-retry'),
-        pageSize: document.getElementById('page-size'),
-        btnPrev: document.getElementById('btn-prev'),
-        btnNext: document.getElementById('btn-next'),
-        pageNumbers: document.getElementById('page-numbers'),
-        
+        orgSelector: requireElement('org-selector'),
+        userStoryRef: requireElement('user-story-ref'),
+        commitMessage: requireElement('commit-message'),
+        btnCommit: requireElement('btn-commit'),
+        btnRefresh: requireElement('btn-refresh'),
+        tabAll: requireElement('tab-all'),
+        tabSelected: requireElement('tab-selected'),
+        gridBody: requireElement('grid-body'),
+        itemCount: requireElement('item-count'),
+        selectAll: requireElement('select-all'),
+        loadingOverlay: requireElement('loading-overlay'),
+        errorBanner: requireElement('error-banner'),
+        errorMessage: requireElement('error-message'),
+        successBanner: requireElement('success-banner'),
+        successMessage: requireElement('success-message'),
+        btnRetry: requireElement('btn-retry'),
+        pageSize: requireElement('page-size'),
+        btnPrev: requireElement('btn-prev'),
+        btnNext: requireElement('btn-next'),
+        pageNumbers: requireElement('page-numbers'),
+
         // Headers for sorting
         headers: document.querySelectorAll('.grid__header--sortable'),
-        
+
         // Filters
-        filterName: document.getElementById('filter-name'),
-        filterType: document.getElementById('filter-type'),
-        filterUser: document.getElementById('filter-user')
+        filterName: requireElement('filter-name'),
+        filterType: requireElement('filter-type'),
+        filterUser: requireElement('filter-user')
     };
 
+    // --- State save debounce ---
+    let _saveTimeout = null;
+    function debouncedSaveState() {
+        if (_saveTimeout) clearTimeout(_saveTimeout);
+        _saveTimeout = setTimeout(() => {
+            vscode.setState({
+                ...state,
+                selectedIds: Array.from(state.selectedIds)
+            });
+        }, 300);
+    }
+
     // --- Initialization ---
-    // Fetch orgs first
     vscode.postMessage({ command: 'getOrgList', requestId: 'init-orgs' });
 
-    // If we have no data, fetch it (assuming default org for now, or wait for org list)
-    if (state.allMetadata.length === 0) {
-       // We'll wait for the org list to trigger the first fetch
-    } else {
+    if (state.allMetadata.length > 0) {
         updateFilteredData();
         renderGrid();
         updateUI();
     }
 
     // --- Event Listeners ---
-    
+
     // Message Handling
     window.addEventListener('message', event => {
         const message = event.data;
@@ -166,37 +177,26 @@
             if (isChecked) state.selectedIds.add(item.id);
             else state.selectedIds.delete(item.id);
         });
-        renderGrid(); // Re-render to update checkboxes
+        renderGrid();
         updateUI();
     });
 
     // Org Selector
-    dom.orgSelector.addEventListener('change', () => {
-        fetchMetadata();
-    });
+    dom.orgSelector.addEventListener('change', () => fetchMetadata());
 
     // Retry Button
-    dom.btnRetry.addEventListener('click', () => {
-        fetchMetadata();
-    });
+    dom.btnRetry.addEventListener('click', () => fetchMetadata());
 
     // Refresh Button
-    const btnRefresh = document.getElementById('btn-refresh');
-    if (btnRefresh) {
-        btnRefresh.addEventListener('click', () => fetchMetadata());
-    }
+    dom.btnRefresh.addEventListener('click', () => fetchMetadata());
 
     // Commit Button
-    dom.btnCommit.addEventListener('click', () => {
-        commitChanges();
-    });
-    
+    dom.btnCommit.addEventListener('click', () => commitChanges());
+
     // Commit Message Input (to enable button)
-    dom.commitMessage.addEventListener('input', () => {
-        updateUI();
-    });
-    
-    // Shortcuts
+    dom.commitMessage.addEventListener('input', () => updateUI());
+
+    // Keyboard Shortcut: Ctrl+Enter to commit
     dom.commitMessage.addEventListener('keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
             if (!dom.btnCommit.disabled) {
@@ -205,9 +205,8 @@
         }
     });
 
-    // Global shortcuts
+    // Global Keyboard Shortcut: Ctrl+A to select all visible
     window.addEventListener('keydown', (e) => {
-        // Ctrl+A to select all (only if not in input)
         if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
             const tagName = e.target.tagName.toLowerCase();
             if (tagName !== 'input' && tagName !== 'textarea') {
@@ -229,9 +228,10 @@
 
         showLoading(true);
         hideError();
-        
-        vscode.postMessage({ 
-            command: 'fetchMetadata', 
+        hideSuccess();
+
+        vscode.postMessage({
+            command: 'fetchMetadata',
             payload: { targetOrg },
             requestId: 'fetch-' + Date.now()
         });
@@ -245,37 +245,48 @@
 
         if (!message || selectedIds.length === 0) return;
 
-        if (selectedIds.length > 50) {
-            if (!confirm(`You are about to retrieve and commit ${selectedIds.length} items. Continue?`)) {
-                return;
-            }
-        }
-
-        showLoading(true, "Starting commit...");
+        showLoading(true, 'Starting commit...');
         hideError();
+        hideSuccess();
         dom.btnCommit.disabled = true;
 
-        vscode.postMessage({
-            command: 'commitChanges',
-            payload: {
-                selectedIds,
-                message,
-                userStoryRef,
-                targetOrg
-            },
-            requestId: 'commit-' + Date.now()
-        });
+        // For large commits, delegate confirmation to the Extension Host
+        // which can use native VS Code dialogs (confirm() doesn't work in webviews)
+        if (selectedIds.length > 50) {
+            vscode.postMessage({
+                command: 'confirmLargeCommit',
+                payload: {
+                    itemCount: selectedIds.length,
+                    selectedIds,
+                    message,
+                    userStoryRef,
+                    targetOrg
+                },
+                requestId: 'commit-' + Date.now()
+            });
+        } else {
+            vscode.postMessage({
+                command: 'commitChanges',
+                payload: {
+                    selectedIds,
+                    message,
+                    userStoryRef,
+                    targetOrg
+                },
+                requestId: 'commit-' + Date.now()
+            });
+        }
     }
 
     function handleOrgList(payload) {
         const { orgs } = payload;
         dom.orgSelector.innerHTML = '';
-        
+
         if (orgs.length === 0) {
-             const option = document.createElement('option');
-             option.text = "No orgs found";
-             dom.orgSelector.add(option);
-             return;
+            const option = document.createElement('option');
+            option.text = 'No orgs found';
+            dom.orgSelector.add(option);
+            return;
         }
 
         orgs.forEach(org => {
@@ -285,7 +296,7 @@
             dom.orgSelector.add(option);
         });
 
-        // Trigger fetch if we have orgs and no data
+        // Trigger first fetch if no data loaded yet
         if (state.allMetadata.length === 0) {
             fetchMetadata();
         }
@@ -294,6 +305,7 @@
     function handleMetadataLoaded(items) {
         showLoading(false);
         state.allMetadata = items;
+        state.pagination.currentPage = 1; // Fix: reset page on reload
         populateTypeFilter();
         updateFilteredData();
         renderGrid();
@@ -315,33 +327,18 @@
     function handleCommitResult(payload) {
         showLoading(false);
         if (payload.success) {
-            // Success
             dom.commitMessage.value = '';
             state.selectedIds.clear();
-            
-            // Show a temporary success message or toast (using vscode API if available, or just an alert/banner)
-            // Since we don't have a toast UI, we'll replace the loading overlay or use the error banner style but green.
-            // For now, let's just refresh the data
-            fetchMetadata();
-            
-            // Simple success indicator in error banner for now (Phase 5 can improve)
-            dom.errorBanner.classList.remove('hidden');
-            dom.errorBanner.style.backgroundColor = 'var(--vscode-notificationsInfoIcon-foreground)'; // Hacky color
-            dom.errorBanner.style.color = 'var(--vscode-editor-background)';
-            dom.errorMessage.textContent = `✓ Committed ${payload.filesCommitted} files.`;
-            
-            setTimeout(() => {
-                dom.errorBanner.classList.add('hidden');
-                 // Reset style
-                dom.errorBanner.style.backgroundColor = '';
-                dom.errorBanner.style.color = '';
-            }, 5000);
 
+            // Show success banner
+            showSuccess(`✓ Committed ${payload.filesCommitted || 0} files to ${payload.branch || 'branch'} (${payload.commit || ''})`);
+
+            // Refresh metadata after successful commit
+            fetchMetadata();
         } else {
-            // Should be handled by error handler, but just in case
-            handleError({ message: 'Commit reported failure without error details.' });
+            // Cancelled or failed without a separate error
+            updateUI();
         }
-        updateUI();
     }
 
     function populateTypeFilter() {
@@ -358,12 +355,12 @@
     function switchTab(tab) {
         state.currentTab = tab;
         state.pagination.currentPage = 1;
-        
+
         dom.tabAll.classList.toggle('active', tab === 'all');
-        dom.tabAll.setAttribute('aria-selected', tab === 'all');
+        dom.tabAll.setAttribute('aria-selected', String(tab === 'all'));
         dom.tabSelected.classList.toggle('active', tab === 'selected');
-        dom.tabSelected.setAttribute('aria-selected', tab === 'selected');
-        
+        dom.tabSelected.setAttribute('aria-selected', String(tab === 'selected'));
+
         updateFilteredData();
         renderGrid();
     }
@@ -390,12 +387,8 @@
         // 3. Sort
         const { column, direction } = state.sort;
         data.sort((a, b) => {
-            let valA = a[column];
-            let valB = b[column];
-            
-            // Handle undefined
-            if (!valA) valA = '';
-            if (!valB) valB = '';
+            let valA = a[column] || '';
+            let valB = b[column] || '';
 
             if (valA < valB) return direction === 'asc' ? -1 : 1;
             if (valA > valB) return direction === 'asc' ? 1 : -1;
@@ -403,7 +396,7 @@
         });
 
         state.filteredMetadata = data;
-        
+
         // Update header sort icons
         dom.headers.forEach(h => {
             h.removeAttribute('data-sort-dir');
@@ -426,12 +419,12 @@
         pageItems.forEach(item => {
             const tr = document.createElement('tr');
             tr.role = 'row';
+            tr.dataset.id = item.id;
             const isSelected = state.selectedIds.has(item.id);
             if (isSelected) tr.classList.add('selected');
 
             // Toggle selection on row click
             tr.addEventListener('click', (e) => {
-                // Prevent duplicate toggle if clicking directly on checkbox
                 if (e.target.tagName !== 'INPUT') {
                     toggleSelection(item.id);
                 }
@@ -442,10 +435,10 @@
                 <td title="${escapeHtml(item.componentName)}">${escapeHtml(item.componentName)}</td>
                 <td>${escapeHtml(item.type)}</td>
                 <td>${escapeHtml(item.modifiedBy)}</td>
-                <td>${formatDate(item.date)}</td>
-                <td>${escapeHtml(item.modifiedBy)}</td> 
+                <td title="${escapeHtml(item.date)}">${formatDate(item.date)}</td>
+                <td>${escapeHtml(item.modifiedBy)}</td>
             `;
-            
+
             // Wire up checkbox explicitly
             const checkbox = tr.querySelector('input[type="checkbox"]');
             checkbox.addEventListener('change', () => toggleSelection(item.id));
@@ -456,12 +449,9 @@
         // Update UI status
         updatePaginationUI();
         updateUI();
-        
-        // Save state
-        vscode.setState({
-            ...state,
-            selectedIds: Array.from(state.selectedIds) // Convert Set to Array for storage
-        });
+
+        // Debounced state save — avoids excessive calls on rapid interaction
+        debouncedSaveState();
     }
 
     function toggleSelection(id) {
@@ -470,12 +460,12 @@
         } else {
             state.selectedIds.add(id);
         }
-        
-        // If in "Selected" tab and we deselect, we need to refresh the list immediately
+
+        // If in "Selected" tab and we deselect, refresh the filtered list
         if (state.currentTab === 'selected' && !state.selectedIds.has(id)) {
             updateFilteredData();
         }
-        
+
         renderGrid();
     }
 
@@ -485,19 +475,19 @@
         const start = (state.pagination.currentPage - 1) * state.pagination.pageSize + 1;
         const end = Math.min(start + state.pagination.pageSize - 1, totalItems);
 
-        dom.itemCount.textContent = totalItems > 0 
+        dom.itemCount.textContent = totalItems > 0
             ? `Showing ${start}-${end} of ${totalItems} items`
             : 'No items found';
 
         dom.btnPrev.disabled = state.pagination.currentPage === 1;
         dom.btnNext.disabled = state.pagination.currentPage === totalPages;
         dom.pageNumbers.textContent = `Page ${state.pagination.currentPage} of ${totalPages}`;
-        
+
         // Update Select All checkbox state
         const visibleIds = getPageSlice().map(i => i.id);
         const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => state.selectedIds.has(id));
         const someVisibleSelected = visibleIds.some(id => state.selectedIds.has(id));
-        
+
         dom.selectAll.checked = allVisibleSelected;
         dom.selectAll.indeterminate = someVisibleSelected && !allVisibleSelected;
     }
@@ -505,7 +495,7 @@
     function updateUI() {
         // Tab Counts
         dom.tabSelected.textContent = `Selected Metadata (${state.selectedIds.size})`;
-        
+
         // Commit Button
         const hasMessage = dom.commitMessage.value.trim().length > 0;
         const hasSelection = state.selectedIds.size > 0;
@@ -513,6 +503,17 @@
     }
 
     // --- Helpers ---
+
+    /**
+     * Requires a DOM element to exist, throws with a clear error if missing.
+     */
+    function requireElement(id) {
+        const el = document.getElementById(id);
+        if (!el) {
+            throw new Error(`[SF Commit Studio] Required DOM element #${id} not found. Check the HTML template.`);
+        }
+        return el;
+    }
 
     function showLoading(isLoading, message) {
         if (isLoading) {
@@ -530,19 +531,37 @@
         dom.errorBanner.classList.add('hidden');
     }
 
+    function showSuccess(message) {
+        dom.successBanner.classList.remove('hidden');
+        dom.successMessage.textContent = message;
+        setTimeout(() => hideSuccess(), 5000);
+    }
+
+    function hideSuccess() {
+        dom.successBanner.classList.add('hidden');
+    }
+
+    /**
+     * Escapes HTML entities to prevent XSS in innerHTML.
+     */
     function escapeHtml(unsafe) {
         if (!unsafe) return '';
         return unsafe
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 
+    /**
+     * Formats an ISO date string to YYYY-MM-DD HH:mm as specified in AGENTS.md.
+     */
     function formatDate(isoString) {
         if (!isoString) return '';
-        const date = new Date(isoString);
-        return date.toLocaleString(); // Use local format
+        const d = new Date(isoString);
+        if (isNaN(d.getTime())) return isoString; // Fallback for invalid dates
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
 })();

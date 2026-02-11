@@ -1,6 +1,14 @@
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
 import { ExtensionHostService } from '../services/ExtensionHostService.js';
+import type { WebviewMessage } from '../types.js';
 
+/**
+ * Manages the lifecycle of the SF Commit Studio Webview panel.
+ *
+ * Implements a singleton pattern — only one panel can exist at a time.
+ * Uses the Disposable pattern to clean up resources when the panel closes.
+ */
 export class CommitStudioPanel {
     public static currentPanel: CommitStudioPanel | undefined;
     public static readonly viewType = 'sfCommitStudio';
@@ -15,16 +23,15 @@ export class CommitStudioPanel {
         this._extensionUri = extensionUri;
         this._service = new ExtensionHostService();
 
-        // Set the webview's initial html content
+        // Set the webview's initial HTML content
         this._update();
 
         // Listen for when the panel is disposed
-        // This happens when the user closes the panel or when the panel is closed programmatically
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
-        // Handle messages from the webview
+        // Handle messages from the webview — cast to typed message
         this._panel.webview.onDidReceiveMessage(
-            message => {
+            (message: WebviewMessage) => {
                 this._service.handleMessage(message, this._panel.webview);
             },
             null,
@@ -32,18 +39,22 @@ export class CommitStudioPanel {
         );
     }
 
-    public static createOrShow(extensionUri: vscode.Uri) {
+    /**
+     * Creates a new panel or reveals the existing one.
+     * Singleton pattern ensures only one instance at a time.
+     */
+    public static createOrShow(extensionUri: vscode.Uri): void {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
 
-        // If we already have a panel, show it.
+        // If we already have a panel, show it
         if (CommitStudioPanel.currentPanel) {
             CommitStudioPanel.currentPanel._panel.reveal(column);
             return;
         }
 
-        // Otherwise, create a new panel.
+        // Otherwise, create a new panel
         const panel = vscode.window.createWebviewPanel(
             CommitStudioPanel.viewType,
             'SF Commit Studio',
@@ -54,56 +65,61 @@ export class CommitStudioPanel {
         CommitStudioPanel.currentPanel = new CommitStudioPanel(panel, extensionUri);
     }
 
-    public dispose() {
+    /**
+     * Disposes the panel and all associated resources.
+     */
+    public dispose(): void {
         CommitStudioPanel.currentPanel = undefined;
 
-        // Clean up our resources
         this._panel.dispose();
 
         while (this._disposables.length) {
-            const x = this._disposables.pop();
-            if (x) {
-                x.dispose();
+            const disposable = this._disposables.pop();
+            if (disposable) {
+                disposable.dispose();
             }
         }
     }
 
-    private _update() {
-        const webview = this._panel.webview;
-        this._panel.webview.html = this._getHtmlForWebview(webview);
+    private _update(): void {
+        this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
     }
 
-    private static _getWebviewOptions(extensionUri: vscode.Uri): vscode.WebviewOptions {
+    /**
+     * Returns webview options with scripts enabled, local resource roots
+     * restricted to `media/`, and context retained when hidden.
+     */
+    private static _getWebviewOptions(
+        extensionUri: vscode.Uri
+    ): vscode.WebviewOptions & vscode.WebviewPanelOptions {
         return {
-            // Enable javascript in the webview
             enableScripts: true,
-
-            // And restrict the webview to only loading content from our extension's `media` directory.
-            localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')]
+            retainContextWhenHidden: true,
+            localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')],
         };
     }
 
+    /**
+     * Generates the full HTML document for the Webview, including:
+     * - A strict Content Security Policy with a cryptographic nonce
+     * - References to the external CSS and JS files in `media/`
+     * - The full UI skeleton (header, tabs, grid, status bar)
+     */
     private _getHtmlForWebview(webview: vscode.Webview): string {
-        // Local path to main script run in the webview
-        const scriptPathOnDisk = vscode.Uri.joinPath(this._extensionUri, 'media', 'main.js');
-        // And the uri we use to load this script in the webview
-        const scriptUri = webview.asWebviewUri(scriptPathOnDisk);
+        const scriptUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'main.js')
+        );
+        const stylesUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'main.css')
+        );
 
-        // Local path to css styles
-        const stylesPathOnDisk = vscode.Uri.joinPath(this._extensionUri, 'media', 'main.css');
-        const stylesUri = webview.asWebviewUri(stylesPathOnDisk);
-
-        // Use a nonce to only allow specific scripts to be run
-        const nonce = getNonce();
+        // Cryptographically secure nonce for CSP
+        const nonce = crypto.randomBytes(16).toString('hex');
 
         return `<!DOCTYPE html>
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
-                <!--
-                    Use a content security policy to only allow loading images from https or from our extension directory,
-                    and only allow scripts that have a specific nonce.
-                -->
                 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} https: data:; script-src 'nonce-${nonce}';">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <link href="${stylesUri}" rel="stylesheet">
@@ -116,11 +132,11 @@ export class CommitStudioPanel {
                         <div class="header__row">
                             <div class="header__field">
                                 <label for="org-selector">Org</label>
-                                <div style="display: flex; gap: 5px;">
+                                <div class="header__org-controls">
                                     <select id="org-selector" aria-label="Select Salesforce Org">
                                         <option value="" disabled selected>Loading orgs...</option>
                                     </select>
-                                    <button id="btn-refresh" title="Refresh Metadata" aria-label="Refresh" style="padding: 0 10px; cursor: pointer;">↻</button>
+                                    <button id="btn-refresh" class="btn-icon" title="Refresh Metadata" aria-label="Refresh">↻</button>
                                 </div>
                             </div>
                             <div class="header__field header__field--grow">
@@ -156,6 +172,9 @@ export class CommitStudioPanel {
                         <div id="error-banner" class="error-banner hidden">
                             <span id="error-message">Error message</span>
                             <button id="btn-retry">Retry</button>
+                        </div>
+                        <div id="success-banner" class="success-banner hidden">
+                            <span id="success-message"></span>
                         </div>
                         <table class="grid" role="grid" aria-label="Metadata Changes">
                             <thead>
@@ -210,13 +229,4 @@ export class CommitStudioPanel {
             </body>
             </html>`;
     }
-}
-
-function getNonce() {
-    let text = '';
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    for (let i = 0; i < 32; i++) {
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
-    }
-    return text;
 }
