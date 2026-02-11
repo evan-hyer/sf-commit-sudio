@@ -1,0 +1,307 @@
+/* SF Commit Studio - Main Styles */
+:root {
+    --header-padding: 1rem;
+    --grid-cell-padding: 0.5rem;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    padding: 0;
+    margin: 0;
+    color: var(--vscode-editor-foreground);
+    background-color: var(--vscode-editor-background);
+    font-family: var(--vscode-font-family);
+    font-weight: var(--vscode-font-weight);
+    font-size: var(--vscode-font-size);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* [A] HEADER BAR */
+.header {
+    background-color: var(--vscode-sideBar-background);
+    padding: var(--header-padding);
+    border-bottom: 1px solid var(--vscode-panel-border);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    flex-shrink: 0;
+}
+
+.header__row {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+.header__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.header__field--grow {
+    flex-grow: 1;
+}
+
+.header__field label {
+    font-size: 0.85em;
+    color: var(--vscode-descriptionForeground);
+    font-weight: 600;
+}
+
+input, select, textarea {
+    background-color: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    border: 1px solid var(--vscode-input-border);
+    padding: 0.4rem;
+    font-family: inherit;
+    font-size: inherit;
+}
+
+input:focus, select:focus, textarea:focus {
+    outline: 1px solid var(--vscode-focusBorder);
+    border-color: var(--vscode-focusBorder);
+}
+
+textarea {
+    resize: vertical;
+    min-height: 4em;
+}
+
+.header__actions {
+    display: flex;
+    align-items: flex-end;
+    align-self: stretch;
+}
+
+button.primary {
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    padding: 0.5rem 1.5rem;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+button.primary:hover {
+    background-color: var(--vscode-button-hoverBackground);
+}
+
+button.primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: var(--vscode-button-secondaryBackground); /* Fallback for disabled look */
+}
+
+/* [B] TAB BAR */
+.tab-bar {
+    display: flex;
+    border-bottom: 1px solid var(--vscode-panel-border);
+    background-color: var(--vscode-sideBar-background);
+    flex-shrink: 0;
+}
+
+.tab {
+    background: transparent;
+    border: none;
+    color: var(--vscode-descriptionForeground);
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+}
+
+.tab:hover {
+    color: var(--vscode-editor-foreground);
+}
+
+.tab.active {
+    color: var(--vscode-editor-foreground);
+    border-bottom-color: var(--vscode-panel-border); /* Or active border color */
+    font-weight: bold;
+}
+
+/* [C] DATA GRID */
+.grid-container {
+    flex-grow: 1;
+    overflow: auto;
+    position: relative;
+}
+
+.grid {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.grid__header {
+    position: sticky;
+    top: 0;
+    background-color: var(--vscode-sideBar-background);
+    color: var(--vscode-editor-foreground);
+    padding: var(--grid-cell-padding);
+    text-align: left;
+    border-bottom: 1px solid var(--vscode-panel-border);
+    font-weight: 600;
+    user-select: none;
+    z-index: 10;
+}
+
+.grid__header--checkbox {
+    width: 40px;
+    text-align: center;
+}
+
+.grid__header--sortable {
+    cursor: pointer;
+}
+
+.grid__header--sortable:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+
+.grid__filter {
+    display: block;
+    width: 100%;
+    margin-top: 0.25rem;
+    font-size: 0.8em;
+    padding: 0.1rem;
+}
+
+/* Zebra striping & Rows */
+.grid tbody tr {
+    border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.grid tbody tr:nth-child(even) {
+    background-color: var(--vscode-list-alternatingBackground);
+}
+
+.grid tbody tr:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+
+.grid tbody tr.selected {
+    background-color: var(--vscode-list-activeSelectionBackground);
+    color: var(--vscode-list-activeSelectionForeground);
+}
+
+.grid tbody td {
+    padding: var(--grid-cell-padding);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.grid tbody td:first-child {
+    text-align: center;
+}
+
+/* Sort Icon */
+.sort-icon::after {
+    content: '';
+    display: inline-block;
+    margin-left: 5px;
+}
+[data-sort-dir="asc"] .sort-icon::after { content: '▲'; }
+[data-sort-dir="desc"] .sort-icon::after { content: '▼'; }
+
+/* [D] STATUS BAR */
+.status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    border-top: 1px solid var(--vscode-panel-border);
+    background-color: var(--vscode-sideBar-background);
+    flex-shrink: 0;
+    font-size: 0.9em;
+}
+
+.pagination {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.pagination button {
+    background: transparent;
+    border: 1px solid var(--vscode-button-border, transparent);
+    color: var(--vscode-editor-foreground);
+    cursor: pointer;
+    padding: 0.2rem 0.5rem;
+}
+
+.pagination button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.pagination button:not(:disabled):hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+
+/* Utilities & Overlays */
+.hidden {
+    display: none !important;
+}
+
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    color: white;
+    gap: 1rem;
+}
+
+.spinner {
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top: 4px solid white;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.error-banner {
+    background-color: var(--vscode-inputValidation-errorBackground);
+    color: var(--vscode-inputValidation-errorForeground);
+    border: 1px solid var(--vscode-inputValidation-errorBorder);
+    padding: 1rem;
+    margin: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#btn-retry {
+    background: transparent;
+    border: 1px solid currentColor;
+    color: inherit;
+    padding: 0.2rem 0.5rem;
+    cursor: pointer;
+}
